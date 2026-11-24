@@ -1,0 +1,59 @@
+# The action on a Swift package on macOS: a run with reports, and a run whose gate fails.
+name: Swift package
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mutation:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: RyoHirota68/xcmutate@v0.13.0
+        id: xcmutate
+        with:
+          package: Shop
+          scheme: Shop
+          destination: platform=macOS
+          artifact-name: mutation-shop
+
+      - name: Outputs of the action
+        run: |
+          echo "exit-code: ${{ steps.xcmutate.outputs.exit-code }}"
+          echo "score: ${{ steps.xcmutate.outputs.score }}"
+          echo "undetected: ${{ steps.xcmutate.outputs.undetected }}"
+          echo "report: ${{ steps.xcmutate.outputs.report }}"
+
+  gate:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # A mutant survives, so this step fails with exit code 3
+      - uses: RyoHirota68/xcmutate@v0.13.0
+        id: gated
+        continue-on-error: true
+        with:
+          package: Shop
+          scheme: Shop
+          destination: platform=macOS
+          fail-on-survived: true
+          annotations: false
+          artifact-name: ""
+
+      - name: The gate failed with exit code 3
+        run: |
+          echo "outcome: ${{ steps.gated.outcome }}, exit-code: ${{ steps.gated.outputs.exit-code }}"
+          test "${{ steps.gated.outcome }}" = failure
+          test "${{ steps.gated.outputs.exit-code }}" = 3
